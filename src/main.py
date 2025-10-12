@@ -9,6 +9,8 @@ from pathlib import Path
 
 load_dotenv()
 
+os.makedirs("uploaded_files", exist_ok=True)
+
 TOKEN = os.getenv('BOT_TOKEN')
 GUILD_ID = os.getenv("GUILD_ID")
 assert GUILD_ID is not None
