@@ -80,14 +80,12 @@ class JustAnon(discord.Client):
         try:
             await file.save(filepath)
             self.assert_wav_48khz(filepath)
-            await interaction.response.send_message(f"your file must be a 48khz wave file please and thank you!", ephemeral=True)
         except Exception as e:
             print(e)
             await interaction.response.send_message(str(e), ephemeral=True)
             return False
 
         return True
-
 
     def run_bot(self):
         self.run(TOKEN)
