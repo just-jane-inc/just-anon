@@ -1,48 +1,25 @@
 import os
 import discord
-from discord import app_commands, ui
+from discord import app_commands
 from dotenv import load_dotenv
 import wave
 from scipy.io import wavfile
 from uuid import uuid4 as uuid
+from pathlib import Path
 
 load_dotenv()
 
-def assert_wav_48khz(filepath) -> bool:
-    """
-    Asserts that the given file is a WAV file and has a sample rate of 48kHz.
-
-    Args:
-        filepath (str): The path to the audio file.
-
-    Raises:
-        AssertionError: If the file is not a WAV file or if its sample rate is not 48kHz.
-        FileNotFoundError: If the file does not exist.
-    """
-    try:
-        with wave.open(filepath, 'rb'):
-            # we do not need to do anything with this, simply opening the 
-            # file asserts its type with the wave library
-            pass 
-    except wave.Error:
-        print("whatever it is not a wave file")
-        return False
-    except FileNotFoundError:
-        print ("erm no file exists")
-        return False
-
-    # Read the WAV file using scipy.io.wavfile to get the sample rate
-    samplerate, _ = wavfile.read(filepath)
-
-    # Assert the sample rate
-    return samplerate == 48000
-
 TOKEN = os.getenv('BOT_TOKEN')
-assert TOKEN is not None
 GUILD_ID = os.getenv("GUILD_ID")
 assert GUILD_ID is not None
+assert TOKEN is not None
 
-class MyBot(discord.Client):
+class JustAnon(discord.Client):
+    """
+    The JustAnon discord bot class
+
+    This is where the magic happens - happyNora
+    """
     def __init__(self):
         super().__init__(intents=discord.Intents.default())
         self.tree = app_commands.CommandTree(self)
@@ -57,48 +34,134 @@ class MyBot(discord.Client):
             await self.tree.sync()
             print("Synced commands globally")
 
-bot = MyBot()
+    def assert_wav_48khz(self, filepath: Path):
+        """
+        Asserts that given file is a WAV file and has a sample rate of 48kHz.
 
-# slash command -> bot gives you instructions -> presents file upload thing -> you upload file
-@bot.tree.command(name="upload_bark", description="give me your barks")
-@app_commands.describe(file="# Upload a wav file with a 48khz sample rate\nhello world\nwhat do")
-async def upload_file(interaction: discord.Interaction, file: discord.Attachment):
-    print(interaction.user.display_name)
-    if file.size > 8 * 1024 * 1024:
-        await interaction.response.send_message("File is too large!", ephemeral=True)
-        return
+        Args:
+            filepath (Path): The path to the audio file.
 
-    try:
-        path = f"uploaded_files/barks/{uuid()}-{interaction.user.display_name}"
-        await file.save(path)
-        if not assert_wav_48khz(path):
-            # TODO: delete file if not okay
+        Raises:
+            Exception: raises an exception with a message that tells the user about the issue
+        """
+        try:
+            with wave.open(str(filepath), 'rb'):
+                pass 
+        except wave.Error:
+            print("whatever it is not a wave file")
+            raise Exception("the provided file is not a wave file")
+        except FileNotFoundError:
+            print ("erm no file exists")
+            raise Exception("internal error")
+
+        samplerate, _ = wavfile.read(str(filepath))
+
+        if samplerate != 48000:
+            raise Exception("provided wave file must be 48khz")
+
+    async def process_file(self, filepath: Path, interaction: discord.Interaction, file: discord.Attachment) -> bool:
+        """
+        Ensures a file is of the correct format and writes it to disk
+
+        Args:
+            filepath (Path): The path to write the file to
+            interaction (discord.Interaction): The interaction model for discord messaging
+            file (discord.Attachment): The attachment containing the file
+
+        Returns:
+            A flag indicating true if the file was saved and is the correct format
+        """
+        if file.size > 8 * 1024 * 1024:
+            await interaction.response.send_message("File is too large!", ephemeral=True)
+            return False
+
+        try:
+            await file.save(filepath)
+            self.assert_wav_48khz(filepath)
             await interaction.response.send_message(f"your file must be a 48khz wave file please and thank you!", ephemeral=True)
-        else:
-            await interaction.response.send_message(f"File '{file.filename}' uploaded and saved locally!", ephemeral=True)
+        except Exception as e:
+            print(e)
+            await interaction.response.send_message(str(e), ephemeral=True)
+            return False
 
-    except Exception as e:
-        await interaction.response.send_message(f"Error processing file: {e}", ephemeral=True)
+        return True
 
-@bot.tree.command(name="upload_clap", description="give me your claps")
+
+    def run_bot(self):
+        self.run(TOKEN)
+
+bot = JustAnon()
+
+@bot.tree.command(name="upload_test", description="give me your barks")
 @app_commands.describe(file="# Upload a wav file with a 48khz sample rate\nhello world\nwhat do")
-async def give_me_your_barks(interaction: discord.Interaction, file: discord.Attachment):
-    if file.size > 8 * 1024 * 1024:
-        await interaction.response.send_message("File is too large!", ephemeral=True)
-        return
+async def upload_audio_command(interaction: discord.Interaction, file: discord.Attachment):
+    view = UploadOptions(file)
+    await interaction.response.send_message(
+        f"📁 File `{file.filename}` received. Set your options below:",
+        view=view,
+        ephemeral=True
+    )
 
-    try:
-        path = f"uploaded_files/claps/{uuid()}-{interaction.user.display_name}"
-        await file.save(path)
-        if not assert_wav_48khz(path):
-            # TODO: delete file if not okay
-            await interaction.response.send_message(f"your file must be a 48khz wave file please and thank you!", ephemeral=True)
+class UploadOptions(discord.ui.View):
+    """The view used in discord for file uploads"""
+    def __init__(self, file: discord.Attachment):
+        super().__init__(timeout=60)
+        self.file = file
+        self.anonymize = None
+        self.choice = None
+
+    @discord.ui.button(label="please anonymize me", style=discord.ButtonStyle.secondary)
+    async def anon_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.anonymize = True
+        self.anon_button.style = discord.ButtonStyle.success
+        self.public_button.style = discord.ButtonStyle.secondary
+        await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label="i am not ashamed", style=discord.ButtonStyle.secondary)
+    async def public_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.anonymize = False
+        self.public_button.style = discord.ButtonStyle.success
+        self.anon_button.style = discord.ButtonStyle.secondary
+        await interaction.response.edit_message(view=self)
+
+    @discord.ui.select(
+        placeholder="Choose one...",
+        options=[
+            discord.SelectOption(label="bark", description="must be earnest!"),
+            discord.SelectOption(label="nya", description="nyyyaaa =^-^="),
+            discord.SelectOption(label="ara-ara", description="mhmm"),
+            discord.SelectOption(label="clap", description="yippie")
+        ]
+    )
+    async def mode_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        self.choice = select.values[0]
+        await interaction.response.defer()
+        #await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
+    async def submit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.choice:
+            await interaction.response.send_message(
+                "⚠️ Please select a category first.", ephemeral=True
+            )
+            return
+        if self.anonymize == None:
+            await interaction.response.send_message(
+                "please choose whether you want to be anonymous", ephemeral=True
+            )
+            return
+
+        path = Path("uploaded_files")
+        if self.anonymize:
+            path = path/f"{self.choice}-{uuid()}"
         else:
-            await interaction.response.send_message(f"File '{file.filename}' uploaded and saved locally!", ephemeral=True)
+            path = path/f"{self.choice}-{uuid()}-{interaction.user.display_name}"
 
+        if not await bot.process_file(path, interaction, self.file):
+            return
 
-    except Exception as e:
-        await interaction.response.send_message(f"Error processing file: {e}", ephemeral=True)
+        await interaction.response.send_message("thank you!", ephemeral=True)
 
-bot.run(TOKEN)
+        self.stop()
 
+bot.run_bot()
