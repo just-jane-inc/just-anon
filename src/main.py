@@ -12,7 +12,7 @@ load_dotenv()
 os.makedirs("uploaded_files", exist_ok=True)
 
 TOKEN = os.getenv('BOT_TOKEN')
-GUILD_ID = os.getenv("GUILD_ID")
+GUILD_ID = os.getenv('GUILD_ID')
 assert GUILD_ID is not None
 assert TOKEN is not None
 
@@ -59,7 +59,7 @@ class JustAnon(discord.Client):
         if samplerate != 48000:
             raise Exception("provided wave file must be 48khz")
 
-    async def process_file(self, filepath: Path, interaction: discord.Interaction, file: discord.Attachment, deleteOnFail: bool) -> bool:
+    async def process_file(self, filepath: Path, file: discord.Attachment, enforceWaveFile: bool):
         """
         Ensures a file is of the correct format and writes it to disk
 
@@ -67,36 +67,23 @@ class JustAnon(discord.Client):
             filepath (Path): The path to write the file to
             interaction (discord.Interaction): The interaction model for discord messaging
             file (discord.Attachment): The attachment containing the file
-
-        Returns:
-            A flag indicating true if the file was saved and is the correct format
         """
         if file.size > 8 * 1024 * 1024:
-            await interaction.response.send_message("File is too large!", ephemeral=True)
-            return False
+            raise Exception("file is too large, must be less then 8mb")
 
         try:
             await file.save(filepath)
-            self.assert_wav_48khz(filepath)
-        except Exception as e:
-            await interaction.response.send_message(
-                f"""
-Encountered an error while processing your file
+            if enforceWaveFile:
+                self.assert_wav_48khz(filepath)
+        except Exception:
+            os.remove(filepath)
+            raise
 
-> {e}
-
-If your file was categorized 'misc' you can ignore this error.
-                """,
-                ephemeral=True)
-
-            if deleteOnFail:
-                os.remove(filepath)
-
-            return False
-
+        print(f"file uploaded succesfully: {filepath}")
         return True
 
     def run_bot(self):
+        assert type(TOKEN) is str
         self.run(TOKEN)
 
 bot = JustAnon()
@@ -151,7 +138,7 @@ class UploadOptions(discord.ui.View):
     async def submit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.choice:
             await interaction.response.send_message(
-                "⚠️ Please select a category first.", ephemeral=True
+                "please select a category first.", ephemeral=True
             )
             return
         if self.anonymize == None:
@@ -166,11 +153,13 @@ class UploadOptions(discord.ui.View):
         else:
             path = path/f"{self.choice}-{uuid()}-{interaction.user.display_name}"
 
-        if not await bot.process_file(path, interaction, self.file, self.choice != "misc"):
-            return
-
-        await interaction.response.send_message("thank you!", ephemeral=True)
-
-        self.stop()
+        try:
+            await bot.process_file(path, self.file, self.choice != "misc")
+            await interaction.response.send_message("thank you!", ephemeral=True)
+            self.stop()
+        except Exception as e:
+            await interaction.response.send_message(
+                f"Encountered an error while processing your file \n ```{e}```",
+                ephemeral=True)
 
 bot.run_bot()
