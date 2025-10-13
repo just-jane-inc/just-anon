@@ -50,10 +50,8 @@ class JustAnon(discord.Client):
             with wave.open(str(filepath), 'rb'):
                 pass 
         except wave.Error:
-            print("whatever it is not a wave file")
             raise Exception("the provided file is not a wave file")
         except FileNotFoundError:
-            print ("erm no file exists")
             raise Exception("internal error")
 
         samplerate, _ = wavfile.read(str(filepath))
@@ -61,7 +59,7 @@ class JustAnon(discord.Client):
         if samplerate != 48000:
             raise Exception("provided wave file must be 48khz")
 
-    async def process_file(self, filepath: Path, interaction: discord.Interaction, file: discord.Attachment) -> bool:
+    async def process_file(self, filepath: Path, interaction: discord.Interaction, file: discord.Attachment, deleteOnFail: bool) -> bool:
         """
         Ensures a file is of the correct format and writes it to disk
 
@@ -81,8 +79,19 @@ class JustAnon(discord.Client):
             await file.save(filepath)
             self.assert_wav_48khz(filepath)
         except Exception as e:
-            print(e)
-            await interaction.response.send_message(str(e), ephemeral=True)
+            await interaction.response.send_message(
+                f"""
+Encountered an error while processing your file
+
+> {e}
+
+If your file was categorized 'misc' you can ignore this error.
+                """,
+                ephemeral=True)
+
+            if deleteOnFail:
+                os.remove(filepath)
+
             return False
 
         return True
@@ -92,8 +101,8 @@ class JustAnon(discord.Client):
 
 bot = JustAnon()
 
-@bot.tree.command(name="upload_test", description="give me your barks")
-@app_commands.describe(file="# Upload a wav file with a 48khz sample rate\nhello world\nwhat do")
+@bot.tree.command(name="anon_upload", description="give me your barks")
+@app_commands.describe(file="# Upload a wav file with a 48khz sample rate")
 async def upload_audio_command(interaction: discord.Interaction, file: discord.Attachment):
     view = UploadOptions(file)
     await interaction.response.send_message(
@@ -105,7 +114,7 @@ async def upload_audio_command(interaction: discord.Interaction, file: discord.A
 class UploadOptions(discord.ui.View):
     """The view used in discord for file uploads"""
     def __init__(self, file: discord.Attachment):
-        super().__init__(timeout=60)
+        super().__init__(timeout=120)
         self.file = file
         self.anonymize = None
         self.choice = None
@@ -130,13 +139,13 @@ class UploadOptions(discord.ui.View):
             discord.SelectOption(label="bark", description="must be earnest!"),
             discord.SelectOption(label="nya", description="nyyyaaa =^-^="),
             discord.SelectOption(label="ara-ara", description="mhmm"),
-            discord.SelectOption(label="clap", description="yippie")
+            discord.SelectOption(label="clap", description="yippie"),
+            discord.SelectOption(label="misc", description="send me something wholesome? idk")
         ]
     )
     async def mode_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         self.choice = select.values[0]
         await interaction.response.defer()
-        #await interaction.response.edit_message(view=self)
 
     @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
     async def submit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -157,7 +166,7 @@ class UploadOptions(discord.ui.View):
         else:
             path = path/f"{self.choice}-{uuid()}-{interaction.user.display_name}"
 
-        if not await bot.process_file(path, interaction, self.file):
+        if not await bot.process_file(path, interaction, self.file, self.choice != "misc"):
             return
 
         await interaction.response.send_message("thank you!", ephemeral=True)
