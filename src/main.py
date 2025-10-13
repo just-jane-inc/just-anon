@@ -162,4 +162,5 @@ class UploadOptions(discord.ui.View):
                 f"Encountered an error while processing your file \n ```{e}```",
                 ephemeral=True)
 
+print("just__started")
 bot.run_bot()
