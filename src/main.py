@@ -2,7 +2,6 @@ import os
 import discord
 from discord import app_commands
 from dotenv import load_dotenv
-import wave
 from scipy.io import wavfile
 from uuid import uuid4 as uuid
 from pathlib import Path
@@ -46,14 +45,6 @@ class JustAnon(discord.Client):
         Raises:
             Exception: raises an exception with a message that tells the user about the issue
         """
-        try:
-            with wave.open(str(filepath), 'rb'):
-                pass 
-        except wave.Error:
-            raise Exception("the provided file is not a wave file")
-        except FileNotFoundError:
-            raise Exception("internal error")
-
         samplerate, _ = wavfile.read(str(filepath))
 
         if samplerate != 48000:
@@ -75,8 +66,9 @@ class JustAnon(discord.Client):
             await file.save(filepath)
             if enforceWaveFile:
                 self.assert_wav_48khz(filepath)
-        except Exception:
+        except Exception as e:
             os.remove(filepath)
+            print(f"error in request: {e}")
             raise
 
         print(f"file uploaded succesfully: {filepath}")
