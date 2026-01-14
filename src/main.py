@@ -142,10 +142,12 @@ class UploadOptions(discord.ui.View):
             return
 
         path = Path("uploaded_files")
+        _, ext = os.path.splitext(self.file.filename)
+
         if self.anonymize:
-            path = path/f"{self.choice}-{uuid()}"
+            path = path/f"{self.choice}-{uuid()}{ext}"
         else:
-            path = path/f"{self.choice}-{uuid()}-{interaction.user.display_name}"
+            path = path/f"{self.choice}-{uuid()}-{interaction.user.display_name}{ext}"
 
         try:
             await bot.process_file(path, self.file, self.choice != "misc")
