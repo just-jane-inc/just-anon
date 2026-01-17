@@ -121,6 +121,7 @@ class UploadOptions(discord.ui.View):
             discord.SelectOption(label="uwu", description="UwU"),
             discord.SelectOption(label="clap", description="yippie"),
             discord.SelectOption(label="bang", description="idk just bang?"),
+            discord.SelectOption(label="slurp", description="just like...be cool with it okay?"),
             discord.SelectOption(label="misc", description="send me something wholesome? idk")
         ]
     )
