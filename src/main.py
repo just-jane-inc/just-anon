@@ -35,22 +35,7 @@ class JustAnon(discord.Client):
             await self.tree.sync()
             print("Synced commands globally")
 
-    def assert_wav_48khz(self, filepath: Path):
-        """
-        Asserts that given file is a WAV file and has a sample rate of 48kHz.
-
-        Args:
-            filepath (Path): The path to the audio file.
-
-        Raises:
-            Exception: raises an exception with a message that tells the user about the issue
-        """
-        samplerate, _ = wavfile.read(str(filepath))
-
-        if samplerate != 48000:
-            raise Exception("provided wave file must be 48khz")
-
-    async def process_file(self, filepath: Path, file: discord.Attachment, enforceWaveFile: bool):
+    async def process_file(self, filepath: Path, file: discord.Attachment):
         """
         Ensures a file is of the correct format and writes it to disk
 
@@ -64,8 +49,6 @@ class JustAnon(discord.Client):
 
         try:
             await file.save(filepath)
-            if enforceWaveFile:
-                self.assert_wav_48khz(filepath)
         except Exception as e:
             os.remove(filepath)
             print(f"error in request: {e}")
@@ -151,7 +134,7 @@ class UploadOptions(discord.ui.View):
             path = path/f"{self.choice}-{uuid()}-{interaction.user.display_name}{ext}"
 
         try:
-            await bot.process_file(path, self.file, self.choice != "misc")
+            await bot.process_file(path, self.file)
             await interaction.response.send_message("thank you!", ephemeral=True)
             self.stop()
         except Exception as e:
